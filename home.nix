@@ -2,6 +2,13 @@
 let
   waterfoxProfileName = "yza1eyzc.default-release";
   waterfoxProfileRel = ".var/app/net.waterfox.waterfox/.waterfox/${waterfoxProfileName}";
+  wallpaperDir = "${config.home.homeDirectory}/Pictures/Wallpapers";
+  awwwSrc = pkgs.fetchgit {
+    url = "https://codeberg.org/LGFae/awww.git";
+    rev = "7a8fc2e646b97e5ae508a44d3449e3b41345d456";
+    sha256 = "1vnpk8iscg1kz31jazy2zjq74fj66s82f02c0hi5afclzf0vxwvf";
+  };
+  awwwPackage = (import "${awwwSrc}/default.nix").packages.${pkgs.stdenv.hostPlatform.system}.awww;
 
   protonPassExtId = "78272b6fa58f4a1abaac99321d503a20@proton.me";
   darkReaderExtId = "addon@darkreader.org";
@@ -68,6 +75,27 @@ let
       printf '%s' "$json_text" > search.json
       mozlz4a search.json "$out"
     '';
+
+  setWallpaper = pkgs.writeShellScriptBin "set-wallpaper" ''
+    dir=${lib.escapeShellArg wallpaperDir}
+
+    if [ ! -d "$dir" ]; then
+      exit 0
+    fi
+
+    image="$(${pkgs.findutils}/bin/find "$dir" -maxdepth 1 -type f \
+      \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) \
+      | ${pkgs.coreutils}/bin/shuf -n 1)"
+
+    if [ -z "$image" ]; then
+      exit 0
+    fi
+
+    export AWWW_TRANSITION_FPS="60"
+    export AWWW_TRANSITION_STEP="2"
+
+    ${awwwPackage}/bin/awww img --resize=fit "$image"
+  '';
 in
 {
   home.stateVersion = "25.05";
@@ -90,12 +118,15 @@ in
     bun
     nordic
     git
+    gh
     ghostty
     grim
     slurp
     swaybg
     swayidle
     swaylock
+    awwwPackage
+    setWallpaper
     wl-clipboard
     wofi
     nerd-fonts.jetbrains-mono
@@ -156,6 +187,10 @@ in
     install -m 0644 ${vimiumAddon}/${vimiumExtId}.xpi "$profile_dir/extensions/${vimiumExtId}.xpi"
   '';
 
+  home.activation.wallpaperDir = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    mkdir -p "$HOME/Pictures/Wallpapers"
+  '';
+
   programs.swaylock.enable = true;
   programs.wofi.enable = true;
   programs.waybar = {
@@ -166,7 +201,7 @@ in
         position = "top";
         modules-left = [ "sway/workspaces" "sway/mode" ];
         modules-center = [ "sway/window" ];
-        modules-right = [ "pulseaudio" "network" "clock" "tray" ];
+        modules-right = [ "pulseaudio" "network" "battery" "clock" "tray" ];
 
         "sway/workspaces" = {
           disable-scroll = true;
@@ -199,6 +234,18 @@ in
           format-wifi = "  {signalStrength}%";
           format-ethernet = "󰈀";
           format-disconnected = "󰖪";
+        };
+
+        battery = {
+          states = {
+            warning = 30;
+            critical = 15;
+          };
+          format = "{icon} {capacity}%";
+          format-charging = "󰂄 {capacity}%";
+          format-full = "󰁹 {capacity}%";
+          format-icons = [ "󰂎" "󰁺" "󰁻" "󰁼" "󰁽" "󰁾" "󰁿" "󰂀" "󰂁" "󰂂" "󰁹" ];
+          tooltip-format = "{timeTo}";
         };
 
         pulseaudio = {
@@ -412,6 +459,8 @@ in
 
       startup = [
         { command = "mako"; }
+        { command = "${awwwPackage}/bin/awww-daemon"; }
+        { command = "${setWallpaper}/bin/set-wallpaper"; }
       ];
     };
   };
