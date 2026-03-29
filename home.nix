@@ -1,5 +1,6 @@
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, osConfig, ... }:
 let
+  isLaptop = osConfig.networking.hostName == "nixos";
   waterfoxProfileName = "yza1eyzc.default-release";
   waterfoxProfileRel = ".var/app/net.waterfox.waterfox/.waterfox/${waterfoxProfileName}";
   wallpaperDir = "${config.home.homeDirectory}/Pictures/Wallpapers";
@@ -96,6 +97,13 @@ let
 
     ${awwwPackage}/bin/awww img --resize=fit "$image"
   '';
+
+  brightnessDown = pkgs.writeShellScriptBin "waybar-brightness-down" ''
+    max="$(${pkgs.brightnessctl}/bin/brightnessctl m)"
+    min="$(( (max + 9) / 10 ))"
+
+    exec ${pkgs.brightnessctl}/bin/brightnessctl --min-value="$min" set 1%-
+  '';
 in
 {
   home.stateVersion = "25.05";
@@ -116,6 +124,7 @@ in
   home.packages = with pkgs; [
     neovim
     bun
+    brightnessctl
     nordic
     git
     gh
@@ -191,6 +200,22 @@ in
     mkdir -p "$HOME/Pictures/Wallpapers"
   '';
 
+  systemd.user.services.awww-daemon = {
+    Unit = {
+      Description = "awww wallpaper daemon";
+      PartOf = [ "sway-session.target" ];
+      After = [ "sway-session.target" ];
+    };
+    Service = {
+      ExecStart = "${awwwPackage}/bin/awww-daemon";
+      Restart = "on-failure";
+      RestartSec = 1;
+    };
+    Install = {
+      WantedBy = [ "sway-session.target" ];
+    };
+  };
+
   programs.swaylock.enable = true;
   programs.wofi.enable = true;
   programs.waybar = {
@@ -201,7 +226,7 @@ in
         position = "top";
         modules-left = [ "sway/workspaces" "sway/mode" ];
         modules-center = [ "sway/window" ];
-        modules-right = [ "pulseaudio" "network" "battery" "clock" "tray" ];
+        modules-right = [ "pulseaudio" ] ++ lib.optionals isLaptop [ "backlight" ] ++ [ "network" "battery" "clock" "tray" ];
 
         "sway/workspaces" = {
           disable-scroll = true;
@@ -254,6 +279,20 @@ in
           format-icons = {
             default = [ "󰕿" "󰖀" "󰕾" ];
           };
+          on-click = "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle";
+          on-scroll-up = "wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ 5%+";
+          on-scroll-down = "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-";
+          tooltip = true;
+          tooltip-format = "Left click: mute/unmute\nScroll: adjust volume";
+        };
+
+        backlight = {
+          format = "{icon} {percent}%";
+          format-icons = [ "󰃞" "󰃟" "󰃠" ];
+          on-scroll-up = "brightnessctl set 1%+";
+          on-scroll-down = "${brightnessDown}/bin/waybar-brightness-down";
+          tooltip = true;
+          tooltip-format = "Scroll: adjust brightness (min 10%)";
         };
       }
     ];
@@ -286,6 +325,7 @@ in
       #window,
       #clock,
       #network,
+      #backlight,
       #pulseaudio,
       #tray {
         padding: 0 12px;
@@ -459,7 +499,6 @@ in
 
       startup = [
         { command = "mako"; }
-        { command = "${awwwPackage}/bin/awww-daemon"; }
         { command = "${setWallpaper}/bin/set-wallpaper"; }
       ];
     };
