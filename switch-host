@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+host="${1:-}"
+nixos_dir="/etc/nixos"
+host_link="$nixos_dir/host.nix"
+
+case "$host" in
+  laptop)
+    target="$nixos_dir/hosts/laptop.nix"
+    ;;
+  desktop|desktop-nvidia|nvidia)
+    target="$nixos_dir/hosts/desktop-nvidia.nix"
+    ;;
+  *)
+    echo "usage: switch-host <laptop|desktop>" >&2
+    exit 1
+    ;;
+esac
+
+ln -sfn "$target" "$host_link"
+
+echo "host config switched to: $target"
+echo "next: sudo nixos-rebuild switch"
