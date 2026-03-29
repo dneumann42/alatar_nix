@@ -19,10 +19,9 @@
   home.packages = with pkgs; [
     neovim
     bun
-    gnome-tweaks
     nordic
     git
-    foot
+    ghostty
     grim
     slurp
     swaybg
@@ -43,14 +42,28 @@
     };
   };
 
-  programs.gnome-shell.enable = true;
+  xdg.configFile."ghostty/config".text = ''
+    theme = nord
+    font-family = JetBrainsMono Nerd Font
+    font-size = 13
+    background-opacity = 0.94
+    window-padding-x = 10
+    window-padding-y = 10
+    gtk-titlebar = false
+    shell-integration = detect
+    copy-on-select = clipboard
+    confirm-close-surface = false
+  '';
 
-  programs.gnome-shell.extensions = [
-    { package = pkgs.gnomeExtensions.paperwm; }
-    { package = pkgs.gnomeExtensions.user-themes; }
-  ];
-
-  programs.foot.enable = true;
+  programs.ssh = {
+    enable = true;
+    matchBlocks."github.com" = {
+      hostname = "github.com";
+      user = "git";
+      identityFile = "~/.ssh/id_ed25519";
+      identitiesOnly = true;
+    };
+  };
   programs.swaylock.enable = true;
   programs.wofi.enable = true;
   programs.waybar = {
@@ -151,6 +164,25 @@
     };
   };
 
+  services.fusuma = {
+    enable = true;
+    extraPackages = with pkgs; [ coreutils sway ];
+    settings = {
+      threshold = {
+        swipe = 0.2;
+      };
+      interval = {
+        swipe = 0.8;
+      };
+      swipe = {
+        "3" = {
+          left.command = "${pkgs.sway}/bin/swaymsg workspace next_on_output";
+          right.command = "${pkgs.sway}/bin/swaymsg workspace prev_on_output";
+        };
+      };
+    };
+  };
+
   services.swayidle = {
     enable = true;
     systemdTarget = "sway-session.target";
@@ -189,8 +221,17 @@
     config = {
       workspaceAutoBackAndForth = true;
       modifier = "Mod4";
-      terminal = "foot";
+      terminal = "ghostty";
       menu = "wofi --show drun";
+      input = {
+        "type:touchpad" = {
+          tap = "enabled";
+          natural_scroll = "enabled";
+          scroll_method = "two_finger";
+          click_method = "clickfinger";
+          dwt = "enabled";
+        };
+      };
 
       bars = [
         {
@@ -216,7 +257,7 @@
         );
       in workspaceBindings // {
         "${modifier}+0" = "workspace number 10";
-        "${modifier}+Return" = "exec foot";
+        "${modifier}+Return" = "exec ghostty";
         "${modifier}+a" = "focus parent";
         "${modifier}+b" = "splith";
         "${modifier}+d" = "exec wofi --show drun";
@@ -239,6 +280,7 @@
         "${modifier}+v" = "splitv";
         "${modifier}+w" = "layout tabbed";
         "${modifier}+Shift+equal" = "gaps inner all set ${toString defaultGap}";
+        "Ctrl+Shift+minus" = "move scratchpad";
         "${modifier}+Shift+minus" = "scratchpad show";
         "${modifier}+Ctrl+h" = "resize shrink width 10 px";
         "${modifier}+Ctrl+j" = "resize grow height 10 px";

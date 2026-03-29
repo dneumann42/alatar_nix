@@ -77,14 +77,11 @@
   users.users.dneumann = {
     isNormalUser = true;
     description = "dneumann";
-    extraGroups = [ "networkmanager" "wheel" ];
+    extraGroups = [ "networkmanager" "wheel" "input" ];
     packages = with pkgs; [
     #  thunderbird
     ];
   };
-
-  # Install firefox.
-  programs.firefox.enable = true;
 
   # Allow unfree packages
   nixpkgs.config.allowUnfree = true;

@@ -1,12 +1,9 @@
 { pkgs, ... }:
 
 {
-  services.xserver.enable = true;
-  services.desktopManager.gnome.enable = true;
-  services.displayManager.gdm.enable = false;
   services.displayManager.ly = {
     enable = true;
-    x11Support = true;
+    x11Support = false;
     settings = {
       animation = "colormix";
       animation_timeout_sec = 300;
@@ -43,12 +40,17 @@
     wrapperFeatures.gtk = true;
   };
 
+  programs.ssh.systemd-ssh-proxy.enable = false;
+
   security.polkit.enable = true;
   services.flatpak.enable = true;
 
   xdg.portal = {
     enable = true;
-    extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
+    extraPortals = with pkgs; [
+      xdg-desktop-portal-gtk
+      xdg-desktop-portal-wlr
+    ];
   };
 
   systemd.services.flatpak-flathub = {
