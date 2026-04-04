@@ -18,7 +18,7 @@
     description = "Set the default power profile";
     after = [ "power-profiles-daemon.service" ];
     wants = [ "power-profiles-daemon.service" ];
-    wantedBy = [ "multi-user.target" ];
+    wantedBy = [ "power-profiles-daemon.service" ];
     serviceConfig.Type = "oneshot";
     script = ''
       ${pkgs.power-profiles-daemon}/bin/powerprofilesctl set balanced

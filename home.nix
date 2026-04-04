@@ -1,6 +1,16 @@
 { config, pkgs, lib, osConfig, ... }:
 let
   isLaptop = osConfig.networking.hostName == "nixos";
+  nimbleLatest = pkgs.nimble.overrideAttrs (_: {
+    version = "0.22.3";
+    src = pkgs.fetchFromGitHub {
+      owner = "nim-lang";
+      repo = "nimble";
+      rev = "v0.22.3";
+      hash = "sha256-v0RhIx6ithFJqH6ThKpyvC0JB3CBCevahhCossC+deA=";
+      fetchSubmodules = true;
+    };
+  });
   waterfoxProfileName = "yza1eyzc.default-release";
   waterfoxProfileRel = ".var/app/net.waterfox.waterfox/.waterfox/${waterfoxProfileName}";
   wallpaperDir = "${config.home.homeDirectory}/Pictures/Wallpapers";
@@ -10,6 +20,43 @@ let
     sha256 = "1vnpk8iscg1kz31jazy2zjq74fj66s82f02c0hi5afclzf0vxwvf";
   };
   awwwPackage = (import "${awwwSrc}/default.nix").packages.${pkgs.stdenv.hostPlatform.system}.awww;
+  protonRcloneRemote = "proton";
+  protonRcloneRemotePath = "Media";
+  protonSyncLocalDir = "${config.home.homeDirectory}/.drive";
+  protonRcloneSync = pkgs.writeShellScriptBin "proton-rclone-sync" ''
+    set -eu
+
+    remote="${protonRcloneRemote}:${protonRcloneRemotePath}"
+    local_dir=${lib.escapeShellArg protonSyncLocalDir}
+    state_dir="''${XDG_STATE_HOME:-$HOME/.local/state}/rclone-bisync/proton"
+    first_run_marker="$state_dir/first-run-complete"
+    rclone_config="''${RCLONE_CONFIG:-$HOME/.config/rclone/rclone.conf}"
+
+    ${pkgs.coreutils}/bin/mkdir -p "$local_dir" "$state_dir"
+
+    if [ ! -f "$rclone_config" ]; then
+      echo "rclone config not found at $rclone_config" >&2
+      echo "Run: rclone config" >&2
+      exit 1
+    fi
+
+    ${pkgs.rclone}/bin/rclone mkdir "$remote"
+
+    if [ ! -f "$first_run_marker" ]; then
+      ${pkgs.rclone}/bin/rclone bisync "$local_dir" "$remote" \
+        --resync \
+        --create-empty-src-dirs \
+        --resilient \
+        --recover
+      ${pkgs.coreutils}/bin/touch "$first_run_marker"
+      exit 0
+    fi
+
+    exec ${pkgs.rclone}/bin/rclone bisync "$local_dir" "$remote" \
+      --create-empty-src-dirs \
+      --resilient \
+      --recover
+  '';
 
   protonPassExtId = "78272b6fa58f4a1abaac99321d503a20@proton.me";
   darkReaderExtId = "addon@darkreader.org";
@@ -106,8 +153,22 @@ let
   '';
 in
 {
+  imports = [
+    ./modules/emacs.nix
+    ./modules/neovim.nix
+    (import ./modules/sway.nix { inherit setWallpaper; })
+  ];
+
   home.stateVersion = "25.05";
   home.enableNixpkgsReleaseCheck = false;
+
+  nixpkgs.config.allowUnfreePredicate = pkg:
+    builtins.elem (lib.getName pkg) [
+      "dark-reader"
+      "discord"
+      "proton-pass"
+      "vimium"
+    ];
 
   home.sessionPath = [
     "$HOME/.bun/bin"
@@ -122,10 +183,13 @@ in
   ];
 
   home.packages = with pkgs; [
-    neovim
     bun
     brightnessctl
+    discord
+    nim-unwrapped
+    nimbleLatest
     nordic
+    opencode
     git
     gh
     ghostty
@@ -135,9 +199,14 @@ in
     swayidle
     swaylock
     awwwPackage
+    rclone
+    protonRcloneSync
     setWallpaper
     wl-clipboard
-    wofi
+    rofi
+    termusic
+    beets
+    yt-dlp
     nerd-fonts.jetbrains-mono
   ];
 
@@ -156,8 +225,8 @@ in
     font-family = JetBrainsMono Nerd Font
     font-size = 13
     background-opacity = 0.94
-    window-padding-x = 10
-    window-padding-y = 10
+    window-padding-x = 0
+    window-padding-y = 0
     gtk-titlebar = false
     shell-integration = detect
     copy-on-select = clipboard
@@ -200,6 +269,10 @@ in
     mkdir -p "$HOME/Pictures/Wallpapers"
   '';
 
+  home.activation.protonSyncDir = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    mkdir -p "$HOME/.drive" "$HOME/.config/rclone"
+  '';
+
   systemd.user.services.awww-daemon = {
     Unit = {
       Description = "awww wallpaper daemon";
@@ -216,8 +289,148 @@ in
     };
   };
 
+  systemd.user.services.proton-rclone-sync = {
+    Unit = {
+      Description = "Proton Drive rclone bisync";
+      After = [ "network-online.target" ];
+      Wants = [ "network-online.target" ];
+    };
+    Service = {
+      Type = "oneshot";
+      ExecStart = "${protonRcloneSync}/bin/proton-rclone-sync";
+      Environment = [
+        "HOME=%h"
+        "XDG_CONFIG_HOME=%h/.config"
+        "XDG_STATE_HOME=%h/.local/state"
+        "RCLONE_CONFIG=%h/.config/rclone/rclone.conf"
+      ];
+    };
+  };
+
+  systemd.user.timers.proton-rclone-sync = {
+    Unit = {
+      Description = "Run Proton Drive rclone bisync regularly";
+    };
+    Timer = {
+      OnBootSec = "5m";
+      OnUnitActiveSec = "15m";
+      RandomizedDelaySec = "2m";
+      Unit = "proton-rclone-sync.service";
+    };
+    Install = {
+      WantedBy = [ "default.target" ];
+    };
+  };
+
   programs.swaylock.enable = true;
-  programs.wofi.enable = true;
+  programs.rofi =
+    let
+      inherit (config.lib.formats.rasi) mkLiteral;
+    in
+    {
+      enable = true;
+      package = pkgs.rofi;
+      font = "JetBrainsMono Nerd Font 13";
+      terminal = "ghostty";
+      extraConfig = {
+        modes = "drun,run,window";
+        show-icons = true;
+        drun-display-format = "{icon}  {name}";
+        display-drun = "Applications";
+        display-run = "Run";
+        display-window = "Windows";
+      };
+      theme = {
+        "*" = {
+          background-color = mkLiteral "#2e3440";
+          background-alt = mkLiteral "#3b4252";
+          foreground-color = mkLiteral "#eceff4";
+          selected-normal-background = mkLiteral "#5e81ac";
+          selected-normal-foreground = mkLiteral "#eceff4";
+          selected-active-background = mkLiteral "#a3be8c";
+          selected-active-foreground = mkLiteral "#2e3440";
+          selected-urgent-background = mkLiteral "#bf616a";
+          selected-urgent-foreground = mkLiteral "#eceff4";
+          border-color = mkLiteral "#88c0d0";
+          separatorcolor = mkLiteral "#4c566a";
+          urgent-background = mkLiteral "#bf616a";
+          urgent-foreground = mkLiteral "#eceff4";
+          active-background = mkLiteral "#a3be8c";
+          active-foreground = mkLiteral "#2e3440";
+        };
+
+        "window" = {
+          background-color = mkLiteral "@background-color";
+          border = 2;
+          border-color = mkLiteral "@border-color";
+          border-radius = 10;
+          padding = mkLiteral "18px";
+          width = mkLiteral "720px";
+        };
+
+        "mainbox" = {
+          children = map mkLiteral [ "inputbar" "listview" ];
+          spacing = mkLiteral "14px";
+        };
+
+        "inputbar" = {
+          background-color = mkLiteral "@background-alt";
+          border-radius = 8;
+          children = map mkLiteral [ "prompt" "entry" ];
+          padding = mkLiteral "10px 14px";
+          spacing = mkLiteral "10px";
+        };
+
+        "prompt" = {
+          background-color = mkLiteral "transparent";
+          text-color = mkLiteral "#88c0d0";
+        };
+
+        "entry" = {
+          background-color = mkLiteral "transparent";
+          text-color = mkLiteral "@foreground-color";
+          placeholder = "Search";
+          placeholder-color = mkLiteral "#81a1c1";
+        };
+
+        "listview" = {
+          background-color = mkLiteral "transparent";
+          lines = 10;
+          columns = 1;
+          fixed-height = false;
+          spacing = mkLiteral "8px";
+          scrollbar = false;
+        };
+
+        "element" = {
+          background-color = mkLiteral "@background-alt";
+          border-radius = 8;
+          padding = mkLiteral "10px 12px";
+          spacing = mkLiteral "12px";
+        };
+
+        "element normal.normal" = {
+          background-color = mkLiteral "@background-alt";
+          text-color = mkLiteral "@foreground-color";
+        };
+
+        "element selected.normal" = {
+          background-color = mkLiteral "@selected-normal-background";
+          text-color = mkLiteral "@selected-normal-foreground";
+        };
+
+        "element-icon" = {
+          background-color = mkLiteral "transparent";
+          size = mkLiteral "1.2em";
+        };
+
+        "element-text" = {
+          background-color = mkLiteral "transparent";
+          text-color = mkLiteral "inherit";
+          vertical-align = mkLiteral "0.5";
+        };
+      };
+    };
   programs.waybar = {
     enable = true;
     settings = [
@@ -231,7 +444,7 @@ in
         "sway/workspaces" = {
           disable-scroll = true;
           all-outputs = true;
-          format = "{icon}";
+          format = "{name}: {icon}";
           format-icons = {
             "1" = "";
             "2" = "";
@@ -240,13 +453,6 @@ in
             "5" = "";
             urgent = "";
             default = "";
-          };
-          persistent-workspaces = {
-            "1" = [];
-            "2" = [];
-            "3" = [];
-            "4" = [];
-            "5" = [];
           };
         };
 
@@ -387,120 +593,4 @@ in
     ];
   };
 
-  wayland.windowManager.sway = let
-    defaultGap = 12;
-  in {
-    enable = true;
-    systemd.enable = true;
-    wrapperFeatures.gtk = true;
-    extraConfig = ''
-      gaps inner ${toString defaultGap}
-    '';
-
-    config = {
-      workspaceAutoBackAndForth = true;
-      modifier = "Mod4";
-      terminal = "ghostty";
-      menu = "wofi --show drun";
-      input = {
-        "type:touchpad" = {
-          tap = "enabled";
-          natural_scroll = "enabled";
-          scroll_method = "two_finger";
-          click_method = "clickfinger";
-          dwt = "enabled";
-        };
-      };
-
-      bars = [
-        {
-          command = "waybar";
-        }
-      ];
-
-      keybindings = let
-        modifier = config.wayland.windowManager.sway.config.modifier;
-        workspaceBindings = lib.listToAttrs (
-          builtins.concatLists (map
-            (n: [
-              {
-                name = "${modifier}+${toString n}";
-                value = "workspace number ${toString n}";
-              }
-              {
-                name = "${modifier}+Shift+${toString n}";
-                value = "move container to workspace number ${toString n}";
-              }
-            ])
-            [ 1 2 3 4 5 6 7 8 9 ])
-        );
-      in workspaceBindings // {
-        "${modifier}+0" = "workspace number 10";
-        "${modifier}+Return" = "exec ghostty";
-        "${modifier}+a" = "focus parent";
-        "${modifier}+b" = "splith";
-        "${modifier}+d" = "exec wofi --show drun";
-        "${modifier}+e" = "layout toggle split";
-        "${modifier}+f" = "fullscreen toggle";
-        "${modifier}+q" = "kill";
-        "${modifier}+r" = "mode resize";
-        "${modifier}+s" = "layout stacking";
-        "${modifier}+space" = "focus mode_toggle";
-        "${modifier}+h" = "focus left";
-        "${modifier}+j" = "focus down";
-        "${modifier}+k" = "focus up";
-        "${modifier}+l" = "focus right";
-        "${modifier}+Left" = "focus left";
-        "${modifier}+Down" = "focus down";
-        "${modifier}+Up" = "focus up";
-        "${modifier}+Right" = "focus right";
-        "${modifier}+Ctrl+equal" = "gaps inner current plus 5";
-        "${modifier}+minus" = "scratchpad show";
-        "${modifier}+Ctrl+minus" = "gaps inner current minus 5";
-        "${modifier}+v" = "splitv";
-        "${modifier}+w" = "layout tabbed";
-        "${modifier}+Shift+equal" = "gaps inner all set ${toString defaultGap}";
-        "${modifier}+Shift+minus" = "move scratchpad";
-        "${modifier}+Shift+underscore" = "move scratchpad";
-        "${modifier}+Ctrl+h" = "resize shrink width 10 px";
-        "${modifier}+Ctrl+j" = "resize grow height 10 px";
-        "${modifier}+Ctrl+k" = "resize shrink height 10 px";
-        "${modifier}+Ctrl+l" = "resize grow width 10 px";
-        "${modifier}+Tab" = "workspace back_and_forth";
-        "${modifier}+Shift+0" = "move container to workspace number 10";
-        "${modifier}+Shift+c" = "reload";
-        "${modifier}+Shift+e" = "exec swaynag -t warning -m 'Exit Sway?' -B 'Yes' 'swaymsg exit'";
-        "${modifier}+Shift+h" = "move left";
-        "${modifier}+Shift+j" = "move down";
-        "${modifier}+Shift+k" = "move up";
-        "${modifier}+Shift+l" = "move right";
-        "${modifier}+Shift+Left" = "move left";
-        "${modifier}+Shift+Down" = "move down";
-        "${modifier}+Shift+Up" = "move up";
-        "${modifier}+Shift+Right" = "move right";
-        "${modifier}+Shift+BackSpace" = "move scratchpad";
-        "${modifier}+Shift+r" = "restart";
-        "${modifier}+Shift+space" = "floating toggle";
-        "Print" = "exec grim -g \"$(slurp)\" - | wl-copy";
-      };
-
-      modes.resize = {
-        Escape = "mode default";
-        Return = "mode default";
-        h = "resize shrink width 10 px";
-        j = "resize grow height 10 px";
-        k = "resize shrink height 10 px";
-        l = "resize grow width 10 px";
-        Left = "resize shrink width 10 px";
-        Down = "resize grow height 10 px";
-        Up = "resize shrink height 10 px";
-        Right = "resize grow width 10 px";
-      };
-
-      startup = [
-        { command = "mako"; }
-        { command = "${setWallpaper}/bin/set-wallpaper"; }
-      ];
-    };
-  };
 }

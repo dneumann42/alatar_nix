@@ -1,5 +1,4 @@
 { pkgs, ... }:
-
 {
   services.displayManager.ly = {
     enable = true;
@@ -27,9 +26,11 @@
   };
 
   hardware.graphics.enable = true;
+  hardware.bluetooth.enable = true;
 
   services.power-profiles-daemon.enable = true;
   services.upower.enable = true;
+  services.blueman.enable = true;
   services.logind.settings.Login = {
     HandlePowerKey = "suspend";
     HandleSuspendKey = "suspend";
