@@ -9,6 +9,7 @@
       <home-manager/nixos>
     ];
 
+  programs.fish.enable = true;
   home-manager.users.dneumann = import ./home.nix;
   home-manager.backupFileExtension = "backup";
 
@@ -50,6 +51,8 @@
     extraGroups = [ "networkmanager" "wheel" "input" ];
     packages = with pkgs; [];
   };
+
+  users.defaultUserShell = pkgs.fish;
 
   nix.settings.experimental-features = [
     "nix-command"

@@ -155,6 +155,7 @@ in
 {
   imports = [
     ./modules/emacs.nix
+    ./modules/fish.nix
     ./modules/neovim.nix
     (import ./modules/sway.nix { inherit setWallpaper; })
   ];
@@ -162,11 +163,18 @@ in
   home.stateVersion = "25.05";
   home.enableNixpkgsReleaseCheck = false;
 
+  programs.vscode = {
+    enable = true;
+    package = pkgs.vscode;
+    mutableExtensionsDir = true;
+  };
+
   nixpkgs.config.allowUnfreePredicate = pkg:
     builtins.elem (lib.getName pkg) [
       "dark-reader"
       "discord"
       "proton-pass"
+      "vscode"
       "vimium"
     ];
 
@@ -206,6 +214,7 @@ in
     rofi
     termusic
     beets
+    winboat
     yt-dlp
     nerd-fonts.jetbrains-mono
   ];

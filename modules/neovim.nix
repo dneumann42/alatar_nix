@@ -97,6 +97,35 @@ let
       filetypes = [ "bash" "sh" "zsh" ];
       root_markers = [ ".git" ];
     };
+    csharp_ls = {
+      cmd = [
+        "env"
+        "DOTNET_ROOT=${pkgs.dotnet-sdk_9}/share/dotnet"
+        "PATH=${pkgs.dotnet-sdk_9}/bin:${pkgs.lib.makeBinPath [ pkgs.coreutils pkgs.which ]}"
+        "${pkgs.csharp-ls}/bin/csharp-ls"
+      ];
+      filetypes = [ "cs" ];
+      root_dir = lib.generators.mkLuaInline ''
+        function(bufnr, on_dir)
+          local bufname = vim.api.nvim_buf_get_name(bufnr)
+          local path = vim.fs.dirname(bufname)
+          local root = vim.fs.find(
+            function(name)
+              return name:match("%.sln$") ~= nil or name:match("%.csproj$") ~= nil
+            end,
+            { path = path, upward = true }
+          )[1]
+
+          if not root then
+            root = vim.fs.find(".git", { path = path, upward = true })[1]
+          end
+
+          if root then
+            on_dir(vim.fs.dirname(root))
+          end
+        end
+      '';
+    };
     lua_ls = {
       cmd = [ "lua-language-server" ];
       filetypes = [ "lua" ];
@@ -188,6 +217,8 @@ in
 
     extraPackages = with pkgs; [
       cabal-install
+      csharp-ls
+      dotnet-sdk_9
       ghc
       haskell-language-server
       hlint
