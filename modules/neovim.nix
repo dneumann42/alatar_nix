@@ -72,12 +72,18 @@ let
   ];
 
   pluginSettings = {
+    catppuccin = {
+      flavour = "mocha";
+      transparent_background = true;
+    };
+
     gitsigns = { };
+    mini-files = { };
 
     lualine = {
       options = {
         globalstatus = true;
-        theme = "auto";
+        theme = "catppuccin";
       };
     };
 
@@ -207,11 +213,13 @@ in
     withPython3 = true;
 
     plugins = with pkgs.vimPlugins; [
+      catppuccin-nvim
       plenary-nvim
       telescope-nvim
       nvim-treesitter.withAllGrammars
       lualine-nvim
       gitsigns-nvim
+      mini-nvim
       which-key-nvim
     ];
 
@@ -250,11 +258,65 @@ in
       end
 
       local plugin_settings = ${lib.generators.toLua { } pluginSettings}
+      require("catppuccin").setup(plugin_settings.catppuccin)
+      vim.cmd.colorscheme("catppuccin")
+
       require("gitsigns").setup(plugin_settings.gitsigns)
+      require("mini.files").setup(plugin_settings["mini-files"])
       require("lualine").setup(plugin_settings.lualine)
       require("which-key").setup(plugin_settings["which-key"])
       require("telescope").setup(plugin_settings.telescope)
       require("nvim-treesitter.configs").setup(plugin_settings.treesitter)
+
+      local transparent_groups = {
+        "Normal",
+        "NormalNC",
+        "NormalFloat",
+        "FloatBorder",
+        "Pmenu",
+        "PmenuSel",
+        "PmenuSbar",
+        "PmenuThumb",
+        "SignColumn",
+        "LineNr",
+        "CursorLineNr",
+        "EndOfBuffer",
+        "StatusLine",
+        "StatusLineNC",
+        "WinSeparator",
+        "VertSplit",
+      }
+
+      local function apply_transparency()
+        for _, group in ipairs(transparent_groups) do
+          vim.api.nvim_set_hl(0, group, { bg = "none" })
+        end
+      end
+
+      apply_transparency()
+      vim.api.nvim_create_autocmd("ColorScheme", {
+        group = vim.api.nvim_create_augroup("nixos-neovim-transparency", { clear = true }),
+        callback = apply_transparency,
+      })
+
+      vim.keymap.set("n", "<M-0>", function()
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+          local buf = vim.api.nvim_win_get_buf(win)
+          if vim.bo[buf].filetype == "minifiles" then
+            require("mini.files").close()
+            return
+          end
+        end
+
+        local path = vim.api.nvim_buf_get_name(0)
+        if path == "" then
+          path = vim.loop.cwd()
+        elseif vim.fn.filereadable(path) == 1 then
+          path = vim.fn.fnamemodify(path, ":h")
+        end
+
+        require("mini.files").open(path, true)
+      end, { desc = "Toggle mini.files" })
 
       local servers = ${lib.generators.toLua { } lspServers}
 

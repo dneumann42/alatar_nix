@@ -34,6 +34,10 @@ in
           command = "floating enable, resize set 1200 800";
         }
         {
+          criteria.title = "toggle-ghostty";
+          command = "floating enable, resize set 1400 900, move position center";
+        }
+        {
           criteria.title = "floating-terminal";
           command = "floating enable, resize set 1200 800, move position center";
         }
@@ -64,7 +68,7 @@ in
       in workspaceBindings // {
         "${modifier}+0" = "workspace number 10";
         "${modifier}+Return" = "exec ghostty";
-        "${modifier}+Shift+Return" = "exec ghostty --title=floating-terminal";
+        "${modifier}+Shift+Return" = "exec /etc/nixos/scripts/toggle-ghostty";
         "${modifier}+a" = "focus parent";
         "${modifier}+b" = "splith";
         "${modifier}+d" = "exec rofi -show drun";

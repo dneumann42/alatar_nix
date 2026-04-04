@@ -157,6 +157,7 @@ in
     ./modules/emacs.nix
     ./modules/fish.nix
     ./modules/neovim.nix
+    ./modules/zellij.nix
     (import ./modules/sway.nix { inherit setWallpaper; })
   ];
 
@@ -179,6 +180,7 @@ in
     ];
 
   home.sessionPath = [
+    "/etc/nixos/scripts"
     "$HOME/.bun/bin"
     "$HOME/.local/bin"
     "$HOME/bin"
@@ -196,6 +198,7 @@ in
     discord
     nim-unwrapped
     nimbleLatest
+    jq
     nordic
     opencode
     git

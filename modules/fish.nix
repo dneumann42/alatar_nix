@@ -81,6 +81,9 @@
     interactiveShellInit = ''
       set -g fish_greeting
 
+      if test -d "/etc/nixos/scripts"
+          fish_add_path --move --path "/etc/nixos/scripts"
+      end
       if test -d "$HOME/.local/bin"
           fish_add_path --move --path "$HOME/.local/bin"
       end
