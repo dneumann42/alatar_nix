@@ -21,7 +21,12 @@
   virtualisation.podman = {
     enable = true;
     dockerCompat = true;
+    dockerSocket.enable = true;
     defaultNetwork.settings.dns_enabled = true;
+    autoPrune = {
+      enable = true;
+      dates = "weekly";
+    };
   };
 
   time.timeZone = "America/Los_Angeles";
@@ -54,7 +59,7 @@
   users.users.dneumann = {
     isNormalUser = true;
     description = "dneumann";
-    extraGroups = [ "networkmanager" "wheel" "input" ];
+    extraGroups = [ "networkmanager" "wheel" "input" "podman" ];
     packages = with pkgs; [];
   };
 
@@ -68,6 +73,7 @@
   environment.systemPackages = with pkgs; [
     gcc
     pavucontrol
+    podman-compose
   ];
 
   system.stateVersion = "25.11";

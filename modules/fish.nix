@@ -17,6 +17,7 @@
       gs = "git status --short --branch";
       rebuild = "sudo nixos-rebuild switch";
       v = "nvim";
+      y = "yy";
       ".." = "cd ..";
       "..." = "cd ../..";
       "...." = "cd ../../..";
@@ -42,6 +43,14 @@
         if set -q SSH_CONNECTION
             set_color brblack
             printf "%s@%s " $USER (prompt_hostname)
+        end
+
+        if set -q DEV_ENV_NAME
+            set_color brmagenta
+            printf "[nix:%s] " $DEV_ENV_NAME
+        else if set -q IN_NIX_SHELL
+            set_color brmagenta
+            printf "[nix] "
         end
 
         if fish_is_root_user

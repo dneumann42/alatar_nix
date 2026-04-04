@@ -142,7 +142,7 @@ let
     export AWWW_TRANSITION_FPS="60"
     export AWWW_TRANSITION_STEP="2"
 
-    ${awwwPackage}/bin/awww img --resize=fit "$image"
+    ${awwwPackage}/bin/awww img --resize=crop "$image"
   '';
 
   brightnessDown = pkgs.writeShellScriptBin "waybar-brightness-down" ''
@@ -168,6 +168,56 @@ in
     enable = true;
     package = pkgs.vscode;
     mutableExtensionsDir = true;
+  };
+
+  programs.yazi = {
+    enable = true;
+    enableFishIntegration = true;
+    shellWrapperName = "yy";
+    settings = {
+      manager = {
+        show_hidden = false;
+        sort_by = "natural";
+        sort_dir_first = true;
+      };
+    };
+    theme = {
+      manager = {
+        cwd = { bg = "#000000"; };
+        hovered = { bg = "#000000"; };
+        preview_hovered = { bg = "#000000"; };
+        find_keyword = { bg = "#000000"; };
+        find_position = { bg = "#000000"; };
+      };
+      tabs = {
+        active = { bg = "#000000"; };
+        inactive = { bg = "#000000"; };
+      };
+      mode = {
+        normal_main = { bg = "#000000"; };
+        normal_alt = { bg = "#000000"; };
+        select_main = { bg = "#000000"; };
+        select_alt = { bg = "#000000"; };
+        unset_main = { bg = "#000000"; };
+        unset_alt = { bg = "#000000"; };
+      };
+      status = {
+        overall = { bg = "#000000"; };
+        sep_left = {
+          open = "";
+          close = "";
+        };
+        sep_right = {
+          open = "";
+          close = "";
+        };
+      };
+    };
+  };
+
+  programs.nix-your-shell = {
+    enable = true;
+    enableFishIntegration = true;
   };
 
   nixpkgs.config.allowUnfreePredicate = pkg:
@@ -236,7 +286,8 @@ in
     theme = Nord
     font-family = JetBrainsMono Nerd Font
     font-size = 13
-    background-opacity = 0.94
+    background = #000000
+    background-opacity = 0.85
     window-padding-x = 0
     window-padding-y = 0
     gtk-titlebar = false
@@ -522,8 +573,9 @@ in
       }
 
       window#waybar {
-        background: rgba(46, 52, 64, 0.94);
-        color: #eceff4;
+        background: #000000;
+        color: #f5f5f5;
+        border-bottom: 2px solid #2b2b2b;
       }
 
       #workspaces {
@@ -532,21 +584,50 @@ in
 
       #workspaces button {
         padding: 0 10px;
-        color: #88c0d0;
+        color: #ffb347;
       }
 
       #workspaces button.focused {
-        background: #5e81ac;
-        color: #eceff4;
+        background: #1f1f1f;
+        color: #7dd3fc;
       }
 
       #window,
       #clock,
       #network,
+      #battery,
       #backlight,
       #pulseaudio,
       #tray {
         padding: 0 12px;
+      }
+
+      #window {
+        color: #f5f5f5;
+      }
+
+      #clock {
+        color: #c084fc;
+      }
+
+      #network {
+        color: #34d399;
+      }
+
+      #battery {
+        color: #facc15;
+      }
+
+      #backlight {
+        color: #fb7185;
+      }
+
+      #pulseaudio {
+        color: #60a5fa;
+      }
+
+      #tray {
+        color: #f97316;
       }
     '';
   };
