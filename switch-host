@@ -2,15 +2,13 @@
 set -euo pipefail
 
 host="${1:-}"
-nixos_dir="/etc/nixos"
-host_link="$nixos_dir/host.nix"
 
 case "$host" in
   laptop)
-    target="$nixos_dir/hosts/laptop.nix"
+    flake_host="laptop"
     ;;
   desktop|desktop-nvidia|nvidia)
-    target="$nixos_dir/hosts/desktop-nvidia.nix"
+    flake_host="desktop"
     ;;
   *)
     echo "usage: switch-host <laptop|desktop>" >&2
@@ -18,7 +16,5 @@ case "$host" in
     ;;
 esac
 
-ln -sfn "$target" "$host_link"
-
-echo "host config switched to: $target"
-echo "next: sudo nixos-rebuild switch"
+exec sudo env "NIX_CONFIG=experimental-features = nix-command flakes" \
+  nixos-rebuild switch --flake "/etc/nixos#$flake_host"

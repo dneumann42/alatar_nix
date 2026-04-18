@@ -384,6 +384,7 @@ in
     vimAlias = true;
 
     withPython3 = true;
+    withRuby = true;
 
     plugins = with pkgs.vimPlugins; [
       blink-cmp
@@ -415,14 +416,14 @@ in
       lua-language-server
       netcoredbg
       nil
-      nodePackages.bash-language-server
-      nodePackages.typescript-language-server
+      bash-language-server
+      typescript-language-server
       nimlangserver
       ormolu
       ripgrep
     ];
 
-    extraLuaConfig = ''
+    initLua = ''
       local globals = ${lib.generators.toLua { } globals}
       for name, value in pairs(globals) do
         vim.g[name] = value

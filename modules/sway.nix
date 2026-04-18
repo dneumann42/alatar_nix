@@ -1,4 +1,4 @@
-{ setWallpaper }:
+{ setWallpaper, toggleGhostty }:
 { config, lib, pkgs, ... }:
 
 let
@@ -72,7 +72,7 @@ in
       in workspaceBindings // {
         "${modifier}+0" = "workspace number 10";
         "${modifier}+Return" = "exec ghostty";
-        "${modifier}+Shift+Return" = "exec /etc/nixos/scripts/toggle-ghostty";
+        "${modifier}+Shift+Return" = "exec ${toggleGhostty}";
         "${modifier}+a" = "focus parent";
         "${modifier}+b" = "splith";
         "${modifier}+d" = "exec rofi -show drun";

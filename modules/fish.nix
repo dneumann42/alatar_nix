@@ -15,7 +15,8 @@
       gl = "git log --oneline --graph --decorate";
       gp = "git push";
       gs = "git status --short --branch";
-      rebuild = "sudo nixos-rebuild switch";
+      rebuild = "sudo nixos-rebuild switch --flake /etc/nixos#desktop";
+      rebuild-laptop = "sudo nixos-rebuild switch --flake /etc/nixos#laptop";
       v = "nvim";
       y = "yy";
       ".." = "cd ..";
@@ -90,9 +91,6 @@
     interactiveShellInit = ''
       set -g fish_greeting
 
-      if test -d "/etc/nixos/scripts"
-          fish_add_path --move --path "/etc/nixos/scripts"
-      end
       if test -d "$HOME/.local/bin"
           fish_add_path --move --path "$HOME/.local/bin"
       end

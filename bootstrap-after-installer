@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage: bootstrap-after-installer [desktop|desktop-nvidia|laptop] [--target /etc/nixos] [--dry-run] [--force]
+
+Run this after installing NixOS with the graphical installer and signing in as
+dneumann. The script preserves the generated hardware-configuration.nix,
+archives the installer-created /etc/nixos, copies this git checkout there, and
+runs nixos-rebuild switch with the selected flake host.
+EOF
+}
+
+host="desktop"
+target="/etc/nixos"
+dry_run=0
+force=0
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    desktop|desktop-nvidia|laptop)
+      host="$1"
+      ;;
+    --target)
+      if [ "$#" -lt 2 ]; then
+        echo "error: --target requires a path" >&2
+        exit 1
+      fi
+      target="$2"
+      shift
+      ;;
+    --dry-run)
+      dry_run=1
+      ;;
+    --force)
+      force=1
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+case "$host" in
+  desktop|desktop-nvidia)
+    flake_host="desktop"
+    ;;
+  laptop)
+    flake_host="laptop"
+    ;;
+  *)
+    echo "error: unsupported host: $host" >&2
+    exit 1
+    ;;
+esac
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(git -C "$script_dir" rev-parse --show-toplevel)"
+target="$(readlink -m "$target")"
+hardware_config="$target/hardware-configuration.nix"
+
+run() {
+  printf '+'
+  printf ' %q' "$@"
+  printf '\n'
+
+  if [ "$dry_run" -eq 0 ]; then
+    "$@"
+  fi
+}
+
+rebuild() {
+  run sudo env "NIX_CONFIG=experimental-features = nix-command flakes" \
+    nixos-rebuild switch --flake "$target#$flake_host"
+}
+
+if [ "$(id -un)" != "dneumann" ]; then
+  echo "error: sign in as dneumann before running this script" >&2
+  exit 1
+fi
+
+if ! command -v git >/dev/null 2>&1; then
+  echo "error: git is required; run this from nix-shell -p git" >&2
+  exit 1
+fi
+
+if ! command -v nixos-rebuild >/dev/null 2>&1; then
+  echo "error: nixos-rebuild not found; run this on the newly installed NixOS system" >&2
+  exit 1
+fi
+
+if ! sudo -v; then
+  echo "error: sudo authentication failed" >&2
+  exit 1
+fi
+
+if [ ! -f "$repo_root/flake.nix" ]; then
+  echo "error: this script must be run from a clone of the alatar_nix repo" >&2
+  exit 1
+fi
+
+if [ ! -f "$hardware_config" ]; then
+  echo "error: missing $hardware_config" >&2
+  echo "The graphical installer should have generated this file." >&2
+  exit 1
+fi
+
+if [ -d "$target/.git" ]; then
+  target_root="$(git -C "$target" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ "$target_root" = "$target" ] && [ "$repo_root" = "$target" ]; then
+    rebuild
+    exit 0
+  fi
+
+  if [ "$force" -eq 0 ]; then
+    echo "error: $target is already a git checkout; use --force to archive and replace it" >&2
+    exit 1
+  fi
+fi
+
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT
+
+run cp "$hardware_config" "$tmp_dir/hardware-configuration.nix"
+
+timestamp="$(date +%Y%m%d-%H%M%S)"
+backup="$target.backup-$timestamp"
+
+if [ -e "$backup" ]; then
+  echo "error: backup path already exists: $backup" >&2
+  exit 1
+fi
+
+run sudo mv "$target" "$backup"
+run sudo cp -a "$repo_root" "$target"
+run sudo install -m 0644 "$tmp_dir/hardware-configuration.nix" "$target/hardware-configuration.nix"
+run sudo chown -R root:root "$target"
+rebuild
+
+echo
+echo "Installed $repo_root as $target"
+echo "Archived the graphical installer config at $backup"
+echo "Next rebuild: sudo nixos-rebuild switch --flake $target#$flake_host"

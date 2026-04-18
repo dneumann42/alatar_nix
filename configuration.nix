@@ -1,17 +1,13 @@
-{ config, pkgs, ... }:
+{ lib, pkgs, ... }:
 
 {
   imports =
     [
       ./hardware-configuration.nix
       ./common-desktop.nix
-      ./host.nix
-      <home-manager/nixos>
     ];
 
   programs.fish.enable = true;
-  home-manager.users.dneumann = import ./home.nix;
-  home-manager.backupFileExtension = "backup";
 
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
@@ -69,6 +65,18 @@
     "nix-command"
     "flakes"
   ];
+
+  nixpkgs.config.allowUnfreePredicate = pkg:
+    builtins.elem (lib.getName pkg) [
+      "dark-reader"
+      "discord"
+      "nvidia-settings"
+      "nvidia-x11"
+      "proton-pass"
+      "vscode"
+      "vimium"
+      "winboat"
+    ];
 
   environment.systemPackages = with pkgs; [
     gcc

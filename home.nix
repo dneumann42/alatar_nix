@@ -151,6 +151,41 @@ let
 
     exec ${pkgs.brightnessctl}/bin/brightnessctl --min-value="$min" set 1%-
   '';
+  swayScripts = pkgs.stdenvNoCC.mkDerivation {
+    pname = "alatar-sway-scripts";
+    version = "1.0.0";
+    src = ./scripts;
+
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+
+    installPhase = ''
+      runHook preInstall
+
+      mkdir -p "$out/bin"
+      install -m 0755 toggle-ghostty toggler.fish "$out/bin/"
+      install -m 0644 sway-utils.fish "$out/bin/"
+      patchShebangs "$out/bin"
+
+      wrapProgram "$out/bin/toggle-ghostty" \
+        --prefix PATH : ${lib.makeBinPath [
+          pkgs.fish
+          pkgs.ghostty
+          pkgs.jq
+          pkgs.sway
+          pkgs.zellij
+        ]}
+
+      wrapProgram "$out/bin/toggler.fish" \
+        --prefix PATH : ${lib.makeBinPath [
+          pkgs.coreutils
+          pkgs.fish
+          pkgs.jq
+          pkgs.sway
+        ]}
+
+      runHook postInstall
+    '';
+  };
 in
 {
   imports = [
@@ -158,7 +193,10 @@ in
     ./modules/fish.nix
     ./modules/neovim.nix
     ./modules/zellij.nix
-    (import ./modules/sway.nix { inherit setWallpaper; })
+    (import ./modules/sway.nix {
+      inherit setWallpaper;
+      toggleGhostty = "${swayScripts}/bin/toggle-ghostty";
+    })
   ];
 
   home.stateVersion = "25.05";
@@ -220,17 +258,7 @@ in
     enableFishIntegration = true;
   };
 
-  nixpkgs.config.allowUnfreePredicate = pkg:
-    builtins.elem (lib.getName pkg) [
-      "dark-reader"
-      "discord"
-      "proton-pass"
-      "vscode"
-      "vimium"
-    ];
-
   home.sessionPath = [
-    "/etc/nixos/scripts"
     "$HOME/.bun/bin"
     "$HOME/.local/bin"
     "$HOME/bin"
@@ -263,6 +291,7 @@ in
     rclone
     protonRcloneSync
     setWallpaper
+    swayScripts
     wl-clipboard
     rofi
     termusic
@@ -280,6 +309,7 @@ in
       name = "Nordic";
       package = pkgs.nordic;
     };
+    gtk4.theme = config.gtk.theme;
   };
 
   xdg.configFile."ghostty/config".text = ''
@@ -298,6 +328,7 @@ in
 
   programs.ssh = {
     enable = true;
+    enableDefaultConfig = false;
     matchBlocks."github.com" = {
       hostname = "github.com";
       user = "git";
@@ -663,7 +694,7 @@ in
 
   services.swayidle = {
     enable = true;
-    systemdTarget = "sway-session.target";
+    systemdTargets = [ "sway-session.target" ];
     timeouts = [
       {
         timeout = 600;
@@ -674,16 +705,10 @@ in
         command = "${pkgs.systemd}/bin/systemctl suspend";
       }
     ];
-    events = [
-      {
-        event = "before-sleep";
-        command = "${pkgs.swaylock}/bin/swaylock -fF";
-      }
-      {
-        event = "lock";
-        command = "${pkgs.swaylock}/bin/swaylock -fF";
-      }
-    ];
+    events = {
+      before-sleep = "${pkgs.swaylock}/bin/swaylock -fF";
+      lock = "${pkgs.swaylock}/bin/swaylock -fF";
+    };
   };
 
 }
