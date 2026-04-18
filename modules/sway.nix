@@ -34,6 +34,10 @@ in
           command = "floating enable, resize set 1200 800";
         }
         {
+          criteria.title = "^Nide";
+          command = "border none";
+        }
+        {
           criteria.title = "toggle-ghostty";
           command = "floating enable, resize set 1400 900, move position center";
         }

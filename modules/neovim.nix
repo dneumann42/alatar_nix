@@ -177,6 +177,18 @@ let
         "${pkgs.csharp-ls}/bin/csharp-ls"
       ];
       filetypes = [ "cs" ];
+      capabilities = {
+        experimental = {
+          csharp = {
+            metadataUris = true;
+          };
+        };
+      };
+      handlers = {
+        "textDocument/definition" = lib.generators.mkLuaInline ''
+          require("csharpls_extended").handler
+        '';
+      };
       root_dir = lib.generators.mkLuaInline ''
         function(bufnr, on_dir)
           local bufname = vim.api.nvim_buf_get_name(bufnr)
@@ -296,9 +308,75 @@ let
       root_markers = [ "package.json" "tsconfig.json" "jsconfig.json" ".git" ];
     };
   };
+
+  sushiFtdetect = ''
+    augroup sushi_ftdetect
+      autocmd!
+      autocmd BufRead,BufNewFile *.sushi setfiletype sushi
+    augroup END
+  '';
+
+  sushiFtplugin = ''
+    setlocal commentstring=#\ %s
+    setlocal comments=:#
+    setlocal iskeyword+=-
+    setlocal expandtab
+    setlocal shiftwidth=4
+    setlocal tabstop=4
+  '';
+
+  sushiSyntax = ''
+    if exists("b:current_syntax")
+      finish
+    endif
+
+    syntax case match
+
+    syntax keyword sushiConditional if else
+    syntax keyword sushiRepeat for while
+    syntax keyword sushiFlow return break continue
+    syntax keyword sushiKeyword class fun field do end new self var const null let set eval
+    syntax keyword sushiBoolean true false T F
+
+    syntax keyword sushiTodo TODO FIXME NOTE XXX contained
+    syntax match sushiComment /#.*/ contains=sushiTodo
+
+    syntax region sushiString start=/"/ skip=/\\./ end=/"/ contains=sushiEscape
+    syntax region sushiString start=/'/ skip=/\\./ end=/'/ contains=sushiEscape
+    syntax match sushiEscape /\\./ contained
+
+    syntax match sushiNumber /\v<\d+(\.\d+)?>/
+    syntax match sushiIdentifier /\v<[A-Za-z_][A-Za-z0-9_]*(\-[A-Za-z0-9_]+)*(\.[A-Za-z_][A-Za-z0-9_]*(\-[A-Za-z0-9_]+)*)*>/
+    syntax match sushiOperator /[+*\/%=<>!&|^~:.]\|\%(^\|[^A-Za-z0-9_]\)\zs-\|-\ze\%($\|[^A-Za-z0-9_]\)/
+    syntax match sushiDelimiter /[][(){}]/
+    syntax match sushiFunction /\v^\s*[A-Za-z_][A-Za-z0-9_]*(\-[A-Za-z0-9_]+)*(\.[A-Za-z_][A-Za-z0-9_]*(\-[A-Za-z0-9_]+)*)*/
+
+    highlight default link sushiConditional Conditional
+    highlight default link sushiRepeat Repeat
+    highlight default link sushiFlow Repeat
+    highlight default link sushiKeyword Keyword
+    highlight default link sushiBoolean Boolean
+    highlight default link sushiTodo Todo
+    highlight default link sushiComment Comment
+    highlight default link sushiString String
+    highlight default link sushiEscape SpecialChar
+    highlight default link sushiNumber Number
+    highlight default link sushiIdentifier Identifier
+    highlight default link sushiOperator Operator
+    highlight default link sushiDelimiter Delimiter
+    highlight default link sushiFunction Function
+
+    let b:current_syntax = "sushi"
+  '';
 in
 
 {
+  xdg.configFile = {
+    "nvim/ftdetect/sushi.vim".text = sushiFtdetect;
+    "nvim/ftplugin/sushi.vim".text = sushiFtplugin;
+    "nvim/syntax/sushi.vim".text = sushiSyntax;
+  };
+
   programs.neovim = {
     enable = true;
     defaultEditor = true;
@@ -313,6 +391,7 @@ in
       nvim-web-devicons
       nui-nvim
       noice-nvim
+      csharpls-extended-lsp-nvim
       plenary-nvim
       telescope-nvim
       nvim-dap
@@ -349,12 +428,6 @@ in
         vim.g[name] = value
       end
 
-      vim.filetype.add({
-        extension = {
-          sushi = "sushi",
-        },
-      })
-
       local options = ${lib.generators.toLua { } options}
       for name, value in pairs(options) do
         vim.opt[name] = value
@@ -366,58 +439,6 @@ in
       for _, mapping in ipairs(keymaps) do
         vim.keymap.set(mapping.mode, mapping.lhs, mapping.rhs, mapping.opts)
       end
-
-      vim.api.nvim_create_autocmd("FileType", {
-        group = vim.api.nvim_create_augroup("nixos-neovim-sushi", { clear = true }),
-        pattern = "sushi",
-        callback = function(args)
-          vim.bo[args.buf].commentstring = "# %s"
-          vim.bo[args.buf].comments = ":#"
-          vim.bo[args.buf].expandtab = true
-          vim.bo[args.buf].shiftwidth = 4
-          vim.bo[args.buf].tabstop = 4
-
-          if vim.b[args.buf].sushi_syntax_loaded then
-            return
-          end
-
-          vim.b[args.buf].sushi_syntax_loaded = true
-
-          vim.api.nvim_buf_call(args.buf, function()
-            vim.cmd([[
-              syntax case match
-              syntax keyword sushiConditional if else
-              syntax keyword sushiRepeat for while
-              syntax keyword sushiFlow return break continue
-              syntax keyword sushiKeyword class fun field do end new self var const null let set eval
-              syntax keyword sushiBoolean true false T F
-              syntax match sushiComment /#.*/ contains=sushiTodo
-              syntax keyword sushiTodo TODO FIXME NOTE XXX contained
-              syntax region sushiString start=/"/ skip=/\\\\\|\\"/ end=/"/ contains=sushiEscape
-              syntax region sushiString start=/'/ skip=/\\\\\\|\\'/ end=/'/
-              syntax match sushiEscape /\\./ contained
-              syntax match sushiNumber /\v<\d+(\.\d+)?>/
-              syntax match sushiOperator /[+*\/%=<>!&|^~:.\-\\]/
-              syntax match sushiDelimiter /[][(){}]/
-              syntax match sushiFunction /\v^\s*[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*/
-
-              highlight default link sushiConditional Conditional
-              highlight default link sushiRepeat Repeat
-              highlight default link sushiFlow Repeat
-              highlight default link sushiKeyword Keyword
-              highlight default link sushiBoolean Boolean
-              highlight default link sushiComment Comment
-              highlight default link sushiTodo Todo
-              highlight default link sushiString String
-              highlight default link sushiEscape SpecialChar
-              highlight default link sushiNumber Number
-              highlight default link sushiOperator Operator
-              highlight default link sushiDelimiter Delimiter
-              highlight default link sushiFunction Function
-            ]])
-          end)
-        end,
-      })
 
       local plugin_settings = ${lib.generators.toLua { } pluginSettings}
       require("catppuccin").setup(plugin_settings.catppuccin)
@@ -1076,6 +1097,7 @@ in
 
       local servers = ${lib.generators.toLua { } lspServers}
       local blink = require("blink.cmp")
+      require("csharpls_extended").buf_read_cmd_bind()
 
       for server, settings in pairs(servers) do
         settings.capabilities = blink.get_lsp_capabilities(settings.capabilities)
@@ -1086,6 +1108,7 @@ in
       vim.api.nvim_create_autocmd("LspAttach", {
         group = vim.api.nvim_create_augroup("nixos-neovim-lsp", { clear = true }),
         callback = function(args)
+          local client = vim.lsp.get_client_by_id(args.data.client_id)
           local map = function(mode, lhs, rhs, desc)
             vim.keymap.set(mode, lhs, rhs, {
               buffer = args.buf,
@@ -1094,7 +1117,13 @@ in
           end
 
           map("n", "K", vim.lsp.buf.hover, "LSP hover")
-          map("n", "gd", vim.lsp.buf.definition, "LSP definition")
+          if client and client.name == "csharp_ls" then
+            map("n", "gd", function()
+              require("csharpls_extended").lsp_definitions()
+            end, "LSP definition")
+          else
+            map("n", "gd", vim.lsp.buf.definition, "LSP definition")
+          end
           map("n", "gr", vim.lsp.buf.references, "LSP references")
           map("n", "gi", vim.lsp.buf.implementation, "LSP implementation")
           map("n", "<leader>rn", vim.lsp.buf.rename, "LSP rename")
