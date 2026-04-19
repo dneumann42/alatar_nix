@@ -1,4 +1,4 @@
-{ setWallpaper, toggleGhostty }:
+{ screenshotAreaCopy, setWallpaper, toggleGhostty }:
 { config, lib, pkgs, ... }:
 
 let
@@ -9,6 +9,7 @@ in
     enable = true;
     systemd.enable = true;
     wrapperFeatures.gtk = true;
+    extraOptions = [ "--unsupported-gpu" ];
     extraConfig = ''
       gaps inner ${toString defaultGap}
     '';
@@ -118,7 +119,7 @@ in
         "${modifier}+Shift+BackSpace" = "move scratchpad";
         "${modifier}+Shift+r" = "restart";
         "${modifier}+Shift+space" = "floating toggle";
-        "Print" = "exec grim -g \"$(slurp)\" - | wl-copy";
+        "Print" = "exec ${screenshotAreaCopy}/bin/screenshot-area-copy";
       };
 
       modes.resize = {
@@ -137,6 +138,7 @@ in
       startup = [
         { command = "mako"; }
         { command = "blueman-applet"; }
+        { command = "env QT_QPA_PLATFORM=wayland copyq"; always = true; }
         { command = "${setWallpaper}/bin/set-wallpaper"; }
       ];
     };

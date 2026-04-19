@@ -1,9 +1,9 @@
-{ lib, pkgs, ... }:
+{ lib, pkgs, ... }@args:
 
 {
   imports =
     [
-      ./hardware-configuration.nix
+      args.hardwareConfig
       ./common-desktop.nix
     ];
 
@@ -73,6 +73,8 @@
       "nvidia-settings"
       "nvidia-x11"
       "proton-pass"
+      "steam"
+      "steam-unwrapped"
       "vscode"
       "vimium"
       "winboat"

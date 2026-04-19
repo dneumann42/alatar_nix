@@ -151,6 +151,27 @@ let
 
     exec ${pkgs.brightnessctl}/bin/brightnessctl --min-value="$min" set 1%-
   '';
+  screenshotAreaCopy = pkgs.writeShellScriptBin "screenshot-area-copy" ''
+    set -eu
+
+    geometry="$(${pkgs.slurp}/bin/slurp)" || exit 0
+    [ -n "$geometry" ] || exit 0
+
+    ${pkgs.grim}/bin/grim -g "$geometry" - | ${pkgs.wl-clipboard}/bin/wl-copy --type image/png
+  '';
+  screenshotAreaSave = pkgs.writeShellScriptBin "screenshot-area-save" ''
+    set -eu
+
+    geometry="$(${pkgs.slurp}/bin/slurp)" || exit 0
+    [ -n "$geometry" ] || exit 0
+
+    dir="$HOME/Pictures/Screenshots"
+    ${pkgs.coreutils}/bin/mkdir -p "$dir"
+    out="$dir/screenshot-$(${pkgs.coreutils}/bin/date +%Y%m%d-%H%M%S).png"
+
+    ${pkgs.grim}/bin/grim -g "$geometry" "$out"
+    printf '%s\n' "$out"
+  '';
   swayScripts = pkgs.stdenvNoCC.mkDerivation {
     pname = "alatar-sway-scripts";
     version = "1.0.0";
@@ -194,7 +215,7 @@ in
     ./modules/neovim.nix
     ./modules/zellij.nix
     (import ./modules/sway.nix {
-      inherit setWallpaper;
+      inherit screenshotAreaCopy setWallpaper;
       toggleGhostty = "${swayScripts}/bin/toggle-ghostty";
     })
   ];
@@ -291,7 +312,10 @@ in
     rclone
     protonRcloneSync
     setWallpaper
+    screenshotAreaCopy
+    screenshotAreaSave
     swayScripts
+    copyq
     wl-clipboard
     rofi
     termusic

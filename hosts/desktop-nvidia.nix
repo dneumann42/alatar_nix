@@ -1,6 +1,10 @@
 { config, pkgs, ... }:
 
 {
+  imports = [
+    ../modules/gaming.nix
+  ];
+
   networking.hostName = "nixos-desktop";
 
   # Keep NVIDIA on the standard kernel track instead of the newest kernel ABI.

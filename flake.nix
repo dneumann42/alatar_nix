@@ -16,6 +16,7 @@
       mkHost = hostModule:
         nixpkgs.lib.nixosSystem {
           inherit system;
+          specialArgs = { hardwareConfig = ./hardware-configuration.nix; };
           modules = [
             ./configuration.nix
             hostModule

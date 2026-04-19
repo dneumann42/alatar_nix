@@ -43,18 +43,6 @@ let
   keymaps = [
     {
       mode = "n";
-      lhs = "<leader>f";
-      rhs = "<cmd>Telescope find_files<cr>";
-      opts.desc = "Find files";
-    }
-    {
-      mode = "n";
-      lhs = "<leader>g";
-      rhs = "<cmd>Telescope live_grep<cr>";
-      opts.desc = "Live grep";
-    }
-    {
-      mode = "n";
       lhs = "<leader>b";
       rhs = "<cmd>Telescope buffers<cr>";
       opts.desc = "Find buffers";
@@ -156,11 +144,7 @@ let
       fuzzy.implementation = "prefer_rust_with_warning";
     };
 
-    treesitter = {
-      auto_install = false;
-      highlight.enable = true;
-      indent.enable = true;
-    };
+    treesitter = { };
   };
 
   lspServers = {
@@ -487,7 +471,52 @@ in
       require("which-key").setup(plugin_settings["which-key"])
       require("telescope").setup(plugin_settings.telescope)
       require("blink.cmp").setup(plugin_settings["blink-cmp"])
-      require("nvim-treesitter.configs").setup(plugin_settings.treesitter)
+
+      local telescope_builtin = require("telescope.builtin")
+
+      local function telescope_project_root()
+        local current = vim.api.nvim_buf_get_name(0)
+        if current == "" then
+          current = vim.fn.getcwd()
+        end
+
+        return vim.fs.root(current, { ".git" }) or vim.fn.getcwd()
+      end
+
+      local function telescope_search_dirs(root)
+        local dirs = { "." }
+        if vim.fn.isdirectory(root .. "/vendor") == 1 then
+          table.insert(dirs, "vendor")
+        end
+        return dirs
+      end
+
+      local function telescope_find_files_with_vendor()
+        local root = telescope_project_root()
+        local find_command = { "rg", "--files", "--" }
+        for _, dir in ipairs(telescope_search_dirs(root)) do
+          table.insert(find_command, dir)
+        end
+        telescope_builtin.find_files({ cwd = root, find_command = find_command })
+      end
+
+      local function telescope_live_grep_with_vendor()
+        local root = telescope_project_root()
+        telescope_builtin.live_grep({ cwd = root, search_dirs = telescope_search_dirs(root) })
+      end
+
+      vim.keymap.set("n", "<leader>f", telescope_find_files_with_vendor, { desc = "Find files" })
+      vim.keymap.set("n", "<leader>g", telescope_live_grep_with_vendor, { desc = "Live grep" })
+      require("nvim-treesitter").setup(plugin_settings.treesitter)
+
+      vim.api.nvim_create_autocmd("FileType", {
+        group = vim.api.nvim_create_augroup("nixos-neovim-treesitter", { clear = true }),
+        callback = function(args)
+          if pcall(vim.treesitter.start, args.buf) then
+            vim.bo[args.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+          end
+        end,
+      })
 
       local transparent_groups = {
         "Normal",

@@ -55,6 +55,44 @@ sudo nixos-rebuild switch --flake /etc/nixos#laptop
 The `switch-host` helper also accepts `desktop` or `laptop` and runs the
 matching flake rebuild.
 
+## Gaming
+
+Gaming support is isolated in `modules/gaming.nix` and imported only by the
+NVIDIA desktop host. The laptop profile does not load this module.
+
+The gaming module enables:
+
+- Steam
+- Protontricks
+- GE-Proton as an extra Steam compatibility tool
+- Steam Remote Play firewall rules
+- Steam Local Network Game Transfer firewall rules
+- Steam's Gamescope session
+- GameMode with renice support
+- Gamescope with `CAP_SYS_NICE`
+- MangoHud and Gamescope command-line tools
+
+Apply gaming changes with the desktop rebuild:
+
+```sh
+sudo nixos-rebuild switch --flake /etc/nixos#desktop
+```
+
+After rebuilding, useful checks are:
+
+```sh
+steam
+gamemoded -s
+gamescope --version
+mangohud --version
+```
+
+For a per-game Steam launch option, use:
+
+```text
+gamemoderun mangohud %command%
+```
+
 ## Recovery
 
 The bootstrap script archives the graphical installer's generated config before
