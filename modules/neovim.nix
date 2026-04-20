@@ -149,7 +149,15 @@ let
 
   lspServers = {
     bashls = {
-      cmd = [ "bash-language-server" "start" ];
+      cmd = [
+        "env"
+        "-u"
+        "LD_LIBRARY_PATH"
+        "-u"
+        "NODE_OPTIONS"
+        "${pkgs.bash-language-server}/bin/bash-language-server"
+        "start"
+      ];
       filetypes = [ "bash" "sh" "zsh" ];
       root_markers = [ ".git" ];
     };
@@ -282,14 +290,69 @@ let
       root_markers = [ ".git" ];
     };
     ts_ls = {
-      cmd = [ "typescript-language-server" "--stdio" ];
+      cmd = [
+        "env"
+        "-u"
+        "LD_LIBRARY_PATH"
+        "-u"
+        "NODE_OPTIONS"
+        "${pkgs.typescript-language-server}/bin/typescript-language-server"
+        "--stdio"
+      ];
       filetypes = [
         "javascript"
         "javascriptreact"
         "typescript"
         "typescriptreact"
+        "svelte"
       ];
-      root_markers = [ "package.json" "tsconfig.json" "jsconfig.json" ".git" ];
+      root_dir = lib.generators.mkLuaInline ''
+        function(bufnr, on_dir)
+          local path = vim.fs.dirname(vim.api.nvim_buf_get_name(bufnr))
+          local root = vim.fs.find({ "package.json", "tsconfig.json", "jsconfig.json" }, { path = path, upward = true })[1]
+          if not root then
+            root = vim.fs.find(".git", { path = path, upward = true })[1]
+          end
+          on_dir(root and vim.fs.dirname(root) or vim.uv.cwd())
+        end
+      '';
+    };
+    sveltel = {
+      cmd = [
+        "env"
+        "-u"
+        "LD_LIBRARY_PATH"
+        "-u"
+        "NODE_OPTIONS"
+        "PATH=${pkgs.nodejs_22}/bin:${pkgs.coreutils}/bin:${pkgs.bash}/bin"
+        "${pkgs.svelte-language-server}/bin/svelteserver"
+        "--stdio"
+      ];
+      filetypes = [ "svelte" ];
+      root_dir = lib.generators.mkLuaInline ''
+        function(bufnr, on_dir)
+          local path = vim.fs.dirname(vim.api.nvim_buf_get_name(bufnr))
+          local root = vim.fs.find({ "svelte.config.js", "svelte.config.ts", "vite.config.ts", "vite.config.js", "package.json" }, { path = path, upward = true })[1]
+          if not root then
+            root = vim.fs.find(".git", { path = path, upward = true })[1]
+          end
+          on_dir(root and vim.fs.dirname(root) or vim.uv.cwd())
+        end
+      '';
+      settings = {
+        svelte = {
+          plugin = {
+            svelte = {
+              completions = {
+                enable = true;
+              };
+              diagnostics = {
+                enable = true;
+              };
+            };
+          };
+        };
+      };
     };
   };
 
@@ -372,6 +435,7 @@ in
 
     plugins = with pkgs.vimPlugins; [
       blink-cmp
+      nvim-surround
       catppuccin-nvim
       nvim-web-devicons
       nui-nvim
@@ -387,6 +451,15 @@ in
       gitsigns-nvim
       mini-nvim
       which-key-nvim
+      (pkgs.vimUtils.buildVimPlugin {
+        name = "multicursor-nvim";
+        src = pkgs.fetchFromGitHub {
+          owner = "jake-stewart";
+          repo = "multicursor.nvim";
+          rev = "1.0";
+          sha256 = "sha256-JHl8Z7ESrWus2I6Pe+6gmdgCAZOzAKX7kimy71sAoe4=";
+        };
+      })
     ];
 
     extraPackages = with pkgs; [
@@ -402,6 +475,8 @@ in
       nil
       bash-language-server
       typescript-language-server
+      svelte-language-server
+      nodejs_22
       nimlangserver
       ormolu
       ripgrep
@@ -467,10 +542,74 @@ in
 
       require("gitsigns").setup(plugin_settings.gitsigns)
       require("mini.files").setup(plugin_settings["mini-files"])
+      require("nvim-surround").setup({})
       require("lualine").setup(plugin_settings.lualine)
       require("which-key").setup(plugin_settings["which-key"])
       require("telescope").setup(plugin_settings.telescope)
       require("blink.cmp").setup(plugin_settings["blink-cmp"])
+
+      do
+        local mc = require("multicursor-nvim")
+        mc.setup()
+
+        local set = vim.keymap.set
+
+        set({ "n", "x" }, "<up>", function()
+          mc.lineAddCursor(-1)
+        end)
+        set({ "n", "x" }, "<down>", function()
+          mc.lineAddCursor(1)
+        end)
+        set({ "n", "x" }, "<leader><up>", function()
+          mc.lineSkipCursor(-1)
+        end)
+        set({ "n", "x" }, "<leader><down>", function()
+          mc.lineSkipCursor(1)
+        end)
+
+        set({ "n", "x" }, "<leader>n", function()
+          mc.matchAddCursor(1)
+        end)
+        set({ "n", "x" }, "<leader>s", function()
+          mc.matchSkipCursor(1)
+        end)
+        set({ "n", "x" }, "<leader>N", function()
+          mc.matchAddCursor(-1)
+        end)
+        set({ "n", "x" }, "<leader>S", function()
+          mc.matchSkipCursor(-1)
+        end)
+
+        set("n", "<c-leftmouse>", mc.handleMouse)
+        set("n", "<c-leftdrag>", mc.handleMouseDrag)
+        set("n", "<c-leftrelease>", mc.handleMouseRelease)
+
+        set({ "n", "x" }, "<c-q>", mc.toggleCursor)
+
+        mc.addKeymapLayer(function(layerSet)
+          layerSet({ "n", "x" }, "<left>", mc.prevCursor)
+          layerSet({ "n", "x" }, "<right>", mc.nextCursor)
+
+          layerSet({ "n", "x" }, "<leader>x", mc.deleteCursor)
+
+          layerSet("n", "<esc>", function()
+            if not mc.cursorsEnabled() then
+              mc.enableCursors()
+            else
+              mc.clearCursors()
+            end
+          end)
+        end)
+
+        local hl = vim.api.nvim_set_hl
+        hl(0, "MultiCursorCursor", { reverse = true })
+        hl(0, "MultiCursorVisual", { link = "Visual" })
+        hl(0, "MultiCursorSign", { link = "SignColumn" })
+        hl(0, "MultiCursorMatchPreview", { link = "Search" })
+        hl(0, "MultiCursorDisabledCursor", { reverse = true })
+        hl(0, "MultiCursorDisabledVisual", { link = "Visual" })
+        hl(0, "MultiCursorDisabledSign", { link = "SignColumn" })
+      end
 
       local telescope_builtin = require("telescope.builtin")
 
@@ -569,12 +708,16 @@ in
       define_sign("DiagnosticSignInfo", "", "DiagnosticSignInfo")
       define_sign("DiagnosticSignHint", "󰌵", "DiagnosticSignHint")
 
-      vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, {
-        border = "rounded",
-      })
-      vim.lsp.handlers["textDocument/signatureHelp"] = vim.lsp.with(vim.lsp.handlers.signature_help, {
-        border = "rounded",
-      })
+      vim.lsp.handlers["textDocument/hover"] = function(_, result, ctx, config)
+        config = config or {}
+        config.border = "rounded"
+        return vim.lsp.handlers.hover(_, result, ctx, config)
+      end
+      vim.lsp.handlers["textDocument/signatureHelp"] = function(_, result, ctx, config)
+        config = config or {}
+        config.border = "rounded"
+        return vim.lsp.handlers.signature_help(_, result, ctx, config)
+      end
 
       vim.keymap.set("n", "<M-0>", function()
         for _, win in ipairs(vim.api.nvim_list_wins()) do
@@ -1127,10 +1270,12 @@ in
 
       local servers = ${lib.generators.toLua { } lspServers}
       local blink = require("blink.cmp")
+
       require("csharpls_extended").buf_read_cmd_bind()
 
       for server, settings in pairs(servers) do
-        settings.capabilities = blink.get_lsp_capabilities(settings.capabilities)
+        local capabilities = blink.get_lsp_capabilities(settings.capabilities)
+        settings.capabilities = capabilities
         vim.lsp.config(server, settings)
         vim.lsp.enable(server)
       end

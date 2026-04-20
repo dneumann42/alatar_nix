@@ -3,6 +3,8 @@
 let
   emacsPackage = pkgs.emacs.pkgs.withPackages (epkgs: with epkgs; [
     cape
+    cider
+    clojure-mode
     consult
     corfu
     doom-themes

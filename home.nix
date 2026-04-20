@@ -157,7 +157,17 @@ let
     geometry="$(${pkgs.slurp}/bin/slurp)" || exit 0
     [ -n "$geometry" ] || exit 0
 
-    ${pkgs.grim}/bin/grim -g "$geometry" - | ${pkgs.wl-clipboard}/bin/wl-copy --type image/png
+    dir="''${XDG_RUNTIME_DIR:-/tmp}/screenshots"
+    ${pkgs.coreutils}/bin/mkdir -p "$dir"
+    image="$(${pkgs.coreutils}/bin/mktemp "$dir/screenshot-XXXXXX.png")"
+
+    ${pkgs.grim}/bin/grim -g "$geometry" "$image"
+    ${pkgs.wl-clipboard}/bin/wl-copy --type image/png < "$image"
+    ${pkgs.libnotify}/bin/notify-send \
+      --app-name=screenshot \
+      --icon="$image" \
+      "Screenshot copied" \
+      "Selected area copied to clipboard"
   '';
   screenshotAreaSave = pkgs.writeShellScriptBin "screenshot-area-save" ''
     set -eu
@@ -306,6 +316,7 @@ in
     grim
     slurp
     swaybg
+    swayimg
     swayidle
     swaylock
     awwwPackage

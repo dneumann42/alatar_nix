@@ -211,6 +211,26 @@
         ("M-," . xref-go-back)
         ("C-c e" . eglot)))
 
+(use-package cider
+  :custom
+  (cider-repl-use-pretty-printer t)
+  (cider-selector nil))
+
+(use-package clojure-mode
+  :mode ("\\.clj\\'" . clojure-mode)
+  :mode ("\\.cljs\\'" . clojure-mode)
+  :mode ("\\.cljc\\'" . clojure-mode)
+  :hook
+  (clojure-mode . display-line-numbers-mode)
+  (clojure-mode . (lambda ()
+                    (setq-local tab-width 2)
+                    (setq-local indent-tabs-mode nil)))
+  :bind
+  (:map clojure-mode-map
+        ("C-c C-k" . cider-compile-ns)
+        ("C-c C-z" . cider-switch-to-repl-buffer)
+        ("M-/" . completion-at-point)))
+
 (use-package scheme
   :mode ("\\.scm\\'" . scheme-mode)
   :bind
@@ -233,16 +253,16 @@
   :hook
   (scheme-mode . display-line-numbers-mode)
   (scheme-mode . (lambda ()
-                   (setq-local tab-width 2)
-                   (setq-local indent-tabs-mode nil)
-                   (setq-local xref-show-xrefs-function #'consult-xref)
-                   (setq-local xref-show-definitions-function #'consult-xref)
-                   (setq-local completion-at-point-functions
-                               (append (list (cape-capf-super
-                                              #'eglot-completion-at-point
-                                              #'cape-file
-                                              #'cape-dabbrev))
-                                       completion-at-point-functions)))))
+                    (setq-local tab-width 2)
+                    (setq-local indent-tabs-mode nil)
+                    (setq-local xref-show-xrefs-function #'consult-xref)
+                    (setq-local xref-show-definitions-function #'consult-xref)
+                    (setq-local completion-at-point-functions
+                                (append (list (cape-capf-super
+                                               #'eglot-completion-at-point
+                                               #'cape-file
+                                               #'cape-dabbrev))
+                                        completion-at-point-functions)))))
 
 (let ((main-file (expand-file-name "src/app/main.scm" maindo/project-root)))
   (when (and (null command-line-args-left)
