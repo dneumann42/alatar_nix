@@ -39,6 +39,136 @@ sudo nixos-rebuild switch --flake /etc/nixos#desktop
 
 The fish abbreviation `rebuild` runs the desktop rebuild command.
 
+### Updating nixpkgs
+
+This repo uses flakes. `flake.nix` says `nixpkgs` follows
+`github:NixOS/nixpkgs/nixos-unstable`, but the exact nixpkgs revision is pinned
+in `flake.lock`. Rebuilding does not automatically move to the newest unstable.
+
+To update the pinned nixpkgs revision:
+
+```sh
+rebuild-update
+```
+
+`rebuild-update` expands to `/etc/nixos/switch-host --update desktop`. It
+updates only the `nixpkgs` input, runs a no-link preflight build, then switches
+the desktop host. Use it when a package fix has landed in nixpkgs and the
+current lockfile is still on an older broken revision.
+
+## Proton VPN
+
+The graphical Proton VPN client is installed as `proton-vpn`. It needs a Secret
+Service provider, so the desktop config enables GNOME Keyring and Seahorse.
+
+If login shows `We're sorry, an unexpected error occurred`, check:
+
+```sh
+tail -n 200 ~/.cache/Proton/VPN/logs/vpn-app.log
+journalctl --user --since '30 minutes ago' | rg -i 'proton|keyring|secret|vpn'
+```
+
+Two known failure modes:
+
+- `org.freedesktop.secrets was not provided`: GNOME Keyring is not running or
+  the current session was started before the keyring config was applied. Rebuild
+  and restart the graphical session or reboot.
+- `ImportError: cannot import name 'Location' from 'proton.vpn.session.servers'`:
+  nixpkgs packaged incompatible `proton-vpn` and `proton-vpn-api-core`
+  versions. Update `flake.lock` after the nixpkgs fix reaches `nixos-unstable`.
+
+## Proton Media
+
+The desktop has a reproducible Proton Drive helper named `proton-media`.
+It is generated from `home.nix`; do not hand-edit the installed script.
+
+The fixed paths are:
+
+- remote: `proton:Media`
+- local: `~/.drive`
+- rclone config: `~/.config/rclone/rclone.conf`
+
+The rclone config contains Proton credentials and tokens, so it is intentionally
+not stored in git. Everything else is in Nix.
+
+### First setup
+
+Apply the Nix config first:
+
+```sh
+sudo nixos-rebuild switch --flake /etc/nixos#desktop
+```
+
+Create or verify the `proton` rclone remote:
+
+```sh
+proton-media setup
+proton-media status
+```
+
+Download the remote `Media` folder into `~/.drive`:
+
+```sh
+proton-media download
+```
+
+`download` uses `rclone copy`, not `rclone sync`, so it downloads new and
+changed remote files without deleting local-only files.
+
+### Bidirectional sync
+
+Only initialize bidirectional sync after `~/.drive` looks right.
+
+Preview the first bisync:
+
+```sh
+proton-media dry-run
+```
+
+Initialize bisync:
+
+```sh
+proton-media init
+```
+
+The initial bisync prefers `proton:Media`, so the remote folder is treated as
+the source of truth on first run.
+
+After init, run normal bidirectional sync manually:
+
+```sh
+proton-media sync
+```
+
+Manual upload without bidirectional state is also available:
+
+```sh
+proton-media upload
+```
+
+### Automatic behavior
+
+`proton-rclone-sync.timer` is intentionally download-only. It runs
+`proton-media download`, so the unattended path does not upload local files or
+delete remote files.
+
+To check the timer:
+
+```sh
+systemctl --user status proton-rclone-sync.timer
+```
+
+To run the safe download job now:
+
+```sh
+systemctl --user start proton-rclone-sync.service
+```
+
+Bisync backups go to:
+
+- local: `~/.drive/.rclone-backups/local`
+- remote: `proton:.rclone-backups/Media`
+
 ## Hosts
 
 - `desktop`: NVIDIA desktop
@@ -54,6 +184,13 @@ sudo nixos-rebuild switch --flake /etc/nixos#laptop
 
 The `switch-host` helper also accepts `desktop` or `laptop` and runs the
 matching flake rebuild.
+
+To update nixpkgs before switching:
+
+```sh
+/etc/nixos/switch-host --update desktop
+/etc/nixos/switch-host --update laptop
+```
 
 ## Gaming
 

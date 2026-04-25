@@ -15,8 +15,10 @@
       gl = "git log --oneline --graph --decorate";
       gp = "git push";
       gs = "git status --short --branch";
-      rebuild = "sudo nixos-rebuild switch --flake /etc/nixos#desktop";
-      rebuild-laptop = "sudo nixos-rebuild switch --flake /etc/nixos#laptop";
+      rebuild = "/etc/nixos/switch-host desktop";
+      rebuild-laptop = "/etc/nixos/switch-host laptop";
+      rebuild-update = "/etc/nixos/switch-host --update desktop";
+      rebuild-update-laptop = "/etc/nixos/switch-host --update laptop";
       v = "nvim";
       y = "yy";
       ".." = "cd ..";

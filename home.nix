@@ -22,40 +22,232 @@ let
   awwwPackage = (import "${awwwSrc}/default.nix").packages.${pkgs.stdenv.hostPlatform.system}.awww;
   protonRcloneRemote = "proton";
   protonRcloneRemotePath = "Media";
-  protonSyncLocalDir = "${config.home.homeDirectory}/.drive";
-  protonRcloneSync = pkgs.writeShellScriptBin "proton-rclone-sync" ''
+  musicDir = "${config.home.homeDirectory}/Music";
+  libraryDir = "${config.home.homeDirectory}/Documents/Library";
+  protonMedia = pkgs.writeShellScriptBin "proton-media" ''
     set -eu
 
     remote="${protonRcloneRemote}:${protonRcloneRemotePath}"
-    local_dir=${lib.escapeShellArg protonSyncLocalDir}
-    state_dir="''${XDG_STATE_HOME:-$HOME/.local/state}/rclone-bisync/proton"
-    first_run_marker="$state_dir/first-run-complete"
+    music_dir=${lib.escapeShellArg musicDir}
+    library_dir=${lib.escapeShellArg libraryDir}
+    remote_name=${lib.escapeShellArg protonRcloneRemote}
+    remote_path=${lib.escapeShellArg protonRcloneRemotePath}
+    state_dir="''${XDG_STATE_HOME:-$HOME/.local/state}/rclone-bisync/proton-media"
     rclone_config="''${RCLONE_CONFIG:-$HOME/.config/rclone/rclone.conf}"
 
-    ${pkgs.coreutils}/bin/mkdir -p "$local_dir" "$state_dir"
+    usage() {
+      ${pkgs.coreutils}/bin/cat <<'USAGE'
+    Usage: proton-media <command>
+
+    Commands:
+      setup       Configure the proton rclone remote and create local directories.
+      download    Copy Music and Library from proton:Media to local directories. Does not delete local files.
+      upload      Copy local Music and Library to proton:Media. Does not delete remote files.
+      init        Initialize bidirectional sync, preferring proton:Media on first run.
+      sync        Run bidirectional sync after init.
+      dry-run     Preview the next bidirectional sync.
+      status      Show configured remote, local path, and bisync state.
+
+    Normal flow:
+      proton-media setup
+      proton-media download
+      proton-media init
+      proton-media sync
+    USAGE
+    }
+
+    ensure_dirs() {
+      ${pkgs.coreutils}/bin/mkdir -p \
+        "$music_dir" \
+        "$library_dir" \
+        "$state_dir" \
+        "$state_dir/backups/local" \
+        "$HOME/.config/rclone"
+    }
+
+    require_config() {
+      if [ ! -f "$rclone_config" ]; then
+        echo "rclone config not found at $rclone_config" >&2
+        echo "Run: proton-media setup" >&2
+        exit 1
+      fi
+      if ! ${pkgs.rclone}/bin/rclone listremotes | ${pkgs.gnugrep}/bin/grep -qx "$remote_name:"; then
+        echo "rclone remote '$remote_name' is not configured." >&2
+        echo "Run: proton-media setup" >&2
+        exit 1
+      fi
+    }
+
+    ensure_initialized() {
+      if [ ! -d "$state_dir" ] || ! ${pkgs.findutils}/bin/find "$state_dir" -type f | ${pkgs.gnugrep}/bin/grep -q .; then
+        echo "bisync is not initialized yet." >&2
+        echo "Run: proton-media init" >&2
+        exit 1
+      fi
+    }
+
+    setup_remote() {
+      ensure_dirs
+      if [ -f "$rclone_config" ] && ${pkgs.rclone}/bin/rclone listremotes | ${pkgs.gnugrep}/bin/grep -qx "$remote_name:"; then
+        echo "rclone remote '$remote_name' already exists."
+      else
+        printf 'Proton username: '
+        IFS= read -r username
+        printf 'Proton password: '
+        ${pkgs.coreutils}/bin/stty -echo
+        IFS= read -r password
+        ${pkgs.coreutils}/bin/stty echo
+        printf '\n2FA code, if needed; otherwise press Enter: '
+        IFS= read -r twofa
+
+        if [ -n "$twofa" ]; then
+          ${pkgs.rclone}/bin/rclone config create "$remote_name" protondrive \
+            username "$username" \
+            password "$password" \
+            2fa "$twofa" \
+            --obscure
+        else
+          ${pkgs.rclone}/bin/rclone config create "$remote_name" protondrive \
+            username "$username" \
+            password "$password" \
+            --obscure
+        fi
+      fi
+
+      ${pkgs.rclone}/bin/rclone mkdir "$remote"
+      ${pkgs.rclone}/bin/rclone mkdir "$remote/Music"
+      ${pkgs.rclone}/bin/rclone mkdir "$remote/Library"
+      ${pkgs.rclone}/bin/rclone lsf "$remote" --max-depth 1 >/dev/null
+      echo "Ready:"
+      echo "  $remote/Music <-> $music_dir"
+      echo "  $remote/Library <-> $library_dir"
+    }
+
+    download_pair() {
+      remote_dir="$1"
+      local_dir="$2"
+
+      ${pkgs.rclone}/bin/rclone copy "$remote_dir" "$local_dir" \
+        --create-empty-src-dirs \
+        --progress
+    }
+
+    upload_pair() {
+      local_dir="$1"
+      remote_dir="$2"
+
+      ${pkgs.rclone}/bin/rclone copy "$local_dir" "$remote_dir" \
+        --create-empty-src-dirs \
+        --progress
+    }
+
+    bisync_pair() {
+      name="$1"
+      local_dir="$2"
+      remote_dir="$3"
+      remote_backup="$4"
+      shift 4
+
+      ${pkgs.rclone}/bin/rclone bisync "$local_dir" "$remote_dir" \
+        --workdir "$state_dir/$name" \
+        --backup-dir1 "$state_dir/backups/local/$name" \
+        --backup-dir2 "$remote_name:.rclone-backups/$remote_path/$remote_backup" \
+        --create-empty-src-dirs \
+        --resilient \
+        --recover \
+        "$@"
+    }
+
+    download_all() {
+      download_pair "$remote/Music" "$music_dir"
+      download_pair "$remote/Library" "$library_dir"
+    }
+
+    upload_all() {
+      upload_pair "$music_dir" "$remote/Music"
+      upload_pair "$library_dir" "$remote/Library"
+    }
+
+    bisync_all() {
+      bisync_pair music "$music_dir" "$remote/Music" Music "$@"
+      bisync_pair library "$library_dir" "$remote/Library" Library "$@"
+    }
+
+    command="''${1:-download}"
+    case "$command" in
+      setup)
+        setup_remote
+        ;;
+      download|pull)
+        ensure_dirs
+        require_config
+        download_all
+        ;;
+      upload|push)
+        ensure_dirs
+        require_config
+        upload_all
+        ;;
+      init)
+        ensure_dirs
+        require_config
+        bisync_all --resync --resync-mode path2
+        ;;
+      sync)
+        ensure_dirs
+        require_config
+        ensure_initialized
+        bisync_all
+        ;;
+      dry-run|check)
+        ensure_dirs
+        require_config
+        if [ -d "$state_dir" ] && ${pkgs.findutils}/bin/find "$state_dir" -type f | ${pkgs.gnugrep}/bin/grep -q .; then
+          bisync_all --dry-run --verbose
+        else
+          bisync_all --resync --resync-mode path2 --dry-run --verbose
+        fi
+        ;;
+      status)
+        ensure_dirs
+        echo "remote music:   $remote/Music"
+        echo "local music:    $music_dir"
+        echo "remote library: $remote/Library"
+        echo "local library:  $library_dir"
+        echo "config: $rclone_config"
+        if [ -f "$rclone_config" ]; then
+          ${pkgs.rclone}/bin/rclone listremotes
+        else
+          echo "remote '$remote_name' is not configured yet"
+        fi
+        if [ -d "$state_dir" ] && ${pkgs.findutils}/bin/find "$state_dir" -type f | ${pkgs.gnugrep}/bin/grep -q .; then
+          echo "bisync: initialized"
+        else
+          echo "bisync: not initialized"
+        fi
+        ;;
+      help|-h|--help)
+        usage
+        ;;
+      *)
+        usage >&2
+        exit 2
+        ;;
+    esac
+  '';
+
+  protonRcloneSync = pkgs.writeShellScriptBin "proton-rclone-sync" ''
+    set -eu
+
+    rclone_config="''${RCLONE_CONFIG:-$HOME/.config/rclone/rclone.conf}"
 
     if [ ! -f "$rclone_config" ]; then
       echo "rclone config not found at $rclone_config" >&2
-      echo "Run: rclone config" >&2
-      exit 1
-    fi
-
-    ${pkgs.rclone}/bin/rclone mkdir "$remote"
-
-    if [ ! -f "$first_run_marker" ]; then
-      ${pkgs.rclone}/bin/rclone bisync "$local_dir" "$remote" \
-        --resync \
-        --create-empty-src-dirs \
-        --resilient \
-        --recover
-      ${pkgs.coreutils}/bin/touch "$first_run_marker"
+      echo "Run: proton-media setup" >&2
       exit 0
     fi
 
-    exec ${pkgs.rclone}/bin/rclone bisync "$local_dir" "$remote" \
-      --create-empty-src-dirs \
-      --resilient \
-      --recover
+    exec ${protonMedia}/bin/proton-media download
   '';
 
   protonPassExtId = "78272b6fa58f4a1abaac99321d503a20@proton.me";
@@ -284,6 +476,33 @@ in
     };
   };
 
+  services.mpd = {
+    enable = true;
+    musicDirectory = musicDir;
+    playlistDirectory = "${config.xdg.dataHome}/mpd/playlists";
+    network = {
+      listenAddress = "127.0.0.1";
+      port = 6600;
+    };
+    extraConfig = ''
+      auto_update "yes"
+
+      audio_output {
+        type "pulse"
+        name "PipeWire Pulse"
+      }
+    '';
+  };
+
+  programs.ncmpcpp = {
+    enable = true;
+    settings = {
+      mpd_host = "127.0.0.1";
+      mpd_port = "6600";
+      user_interface = "alternative";
+    };
+  };
+
   programs.nix-your-shell = {
     enable = true;
     enableFishIntegration = true;
@@ -321,6 +540,7 @@ in
     swaylock
     awwwPackage
     rclone
+    protonMedia
     protonRcloneSync
     setWallpaper
     screenshotAreaCopy
@@ -398,8 +618,8 @@ in
     mkdir -p "$HOME/Pictures/Wallpapers"
   '';
 
-  home.activation.protonSyncDir = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    mkdir -p "$HOME/.drive" "$HOME/.config/rclone"
+  home.activation.protonMediaDirs = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    mkdir -p ${lib.escapeShellArg musicDir} ${lib.escapeShellArg libraryDir} "$HOME/.config/rclone"
   '';
 
   systemd.user.services.awww-daemon = {
@@ -420,7 +640,7 @@ in
 
   systemd.user.services.proton-rclone-sync = {
     Unit = {
-      Description = "Proton Drive rclone bisync";
+      Description = "Download Proton Drive Music and Library with rclone";
       After = [ "network-online.target" ];
       Wants = [ "network-online.target" ];
     };
@@ -438,7 +658,7 @@ in
 
   systemd.user.timers.proton-rclone-sync = {
     Unit = {
-      Description = "Run Proton Drive rclone bisync regularly";
+      Description = "Download Proton Drive Music and Library regularly";
     };
     Timer = {
       OnBootSec = "5m";
@@ -725,6 +945,14 @@ in
         };
       };
     };
+  };
+
+  systemd.user.services.mpd.Unit = {
+    After = [
+      "pipewire.service"
+      "pipewire-pulse.service"
+    ];
+    Wants = [ "pipewire-pulse.service" ];
   };
 
   services.swayidle = {

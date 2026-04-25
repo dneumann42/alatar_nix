@@ -61,6 +61,8 @@
   programs.ssh.systemd-ssh-proxy.enable = false;
 
   security.polkit.enable = true;
+  services.gnome.gnome-keyring.enable = true;
+  programs.seahorse.enable = true;
   services.flatpak.enable = true;
 
   xdg.portal = {
@@ -98,7 +100,9 @@
   environment.sessionVariables.NIXOS_OZONE_WL = "1";
   environment.systemPackages = with pkgs; [
     libreoffice
+    nicotine-plus
     power-profiles-daemon
+    proton-vpn
     racket
   ];
 }

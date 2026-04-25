@@ -1,7 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-host="${1:-}"
+update_lock=false
+host=""
+
+for arg in "$@"; do
+  case "$arg" in
+    --update|-u)
+      update_lock=true
+      ;;
+    laptop|desktop|desktop-nvidia|nvidia)
+      host="$arg"
+      ;;
+    *)
+      echo "usage: switch-host [--update] <laptop|desktop>" >&2
+      exit 1
+      ;;
+  esac
+done
 
 case "$host" in
   laptop)
@@ -11,10 +27,17 @@ case "$host" in
     flake_host="desktop"
     ;;
   *)
-    echo "usage: switch-host <laptop|desktop>" >&2
+    echo "usage: switch-host [--update] <laptop|desktop>" >&2
     exit 1
     ;;
 esac
+
+cd /etc/nixos
+
+if "$update_lock"; then
+  nix flake lock --update-input nixpkgs
+  nix build ".#nixosConfigurations.$flake_host.config.system.build.toplevel" --no-link
+fi
 
 exec sudo env "NIX_CONFIG=experimental-features = nix-command flakes" \
   nixos-rebuild switch --flake "/etc/nixos#$flake_host"
