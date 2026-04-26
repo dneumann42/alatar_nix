@@ -3,6 +3,7 @@
 {
   imports = [
     ../modules/gaming.nix
+    ../modules/sway-scripts.nix
   ];
 
   networking.hostName = "nixos-desktop";

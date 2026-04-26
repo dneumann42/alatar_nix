@@ -284,6 +284,25 @@ let
         end
       '';
     };
+    clangd = {
+      cmd = [ "clangd" ];
+      filetypes = [ "c" "cpp" "objc" "objcpp" "cuda" ];
+      root_markers = [ ".git" "CMakeLists.txt" "compile_commands.json" ];
+      settings = {
+        clangd = {
+        };
+      };
+      capabilities = {
+        textDocument = {
+          semanticTokens = {
+            fullSupport = true;
+          };
+        };
+        inlayHint = {
+          resolveProvider = true;
+        };
+      };
+    };
     nim_langserver = {
       cmd = [ "nimlangserver" ];
       filetypes = [ "nim" ];
@@ -474,6 +493,7 @@ in
       netcoredbg
       nil
       bash-language-server
+      clang-tools
       typescript-language-server
       svelte-language-server
       nodejs_22
