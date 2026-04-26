@@ -120,6 +120,7 @@ in
         "${modifier}+Shift+r" = "restart";
         "${modifier}+Shift+space" = "floating toggle";
         "Print" = "exec ${screenshotAreaCopy}/bin/screenshot-area-copy";
+        "${modifier}+o" = "exec ${pkgs.sway}/bin/swaymsg output '*' disable; exec ${pkgs.sway}/bin/swaymsg output 'DP-1' enable";
       };
 
       modes.resize = {
